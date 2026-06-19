@@ -1,7 +1,8 @@
-import { useState }       from "react";
-import { generateClient } from "aws-amplify/data";
-import { uploadData }     from "aws-amplify/storage";
-import type { Schema }    from "../../amplify/data/resource";
+import { useState }          from "react";
+import { generateClient }    from "aws-amplify/data";
+import { uploadData }        from "aws-amplify/storage";
+import { fetchAuthSession }  from "aws-amplify/auth";
+import type { Schema }       from "../../amplify/data/resource";
 
 const client = generateClient<Schema>();
 
@@ -13,19 +14,31 @@ export default function CreateNotePage({ onDone }: Props) {
   const [file,   setFile]   = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   async function handleSave() {
     if (!title.trim()) return;
     setSaving(true);
+    setError(null);
 
     // Step 1: Upload image to S3 (if the user selected a file)
     let imageKey: string | undefined;
     if (file) {
-      imageKey = `note-images/${Date.now()}-${file.name}`;
+      // Get the Cognito identity ID so the path matches the storage access rule:
+      // "note-images/{entity_id}/*"
+      const session = await fetchAuthSession();
+      const identityId = session.identityId;
+      imageKey = `note-images/${identityId}/${Date.now()}-${file.name}`;
       await uploadData({ path: imageKey, data: file }).result;
     }
 
     // Step 2: Save note metadata to DynamoDB via AppSync
-    await client.models.Note.create({ title, body, imageKey });
+    const { errors } = await client.models.Note.create({ title, body, imageKey });
+    if (errors && errors.length > 0) {
+      setError(errors[0].message);
+      setSaving(false);
+      return;
+    }
 
     setSaving(false);
     onDone();
@@ -91,6 +104,12 @@ export default function CreateNotePage({ onDone }: Props) {
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         style={{ display: "block", marginBottom: "1.5rem" }}
       />
+
+      {error && (
+        <p style={{ color: "#dc2626", marginBottom: "1rem", fontSize: "0.9rem" }}>
+          Error: {error}
+        </p>
+      )}
 
       <div style={{ display: "flex", gap: "0.75rem" }}>
         <button

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { getUrl }              from "aws-amplify/storage";
-import { invoke }              from "aws-amplify/functions";
+import { generateClient }      from "aws-amplify/api";
 import type { Schema }         from "../../amplify/data/resource";
+
+const client = generateClient<Schema>();
 
 type Props = {
   note: Schema["Note"]["type"];
@@ -23,12 +25,15 @@ export default function NoteDetail({ note, onBack }: Props) {
 
   async function handleSummarize() {
     setSummarizing(true);
-    const response = await invoke({
-      functionName: "noteSummarizer",
-      payload: JSON.stringify({ title: note.title, body: note.body ?? "" }),
+    const { data, errors } = await client.queries.summarizeNote({
+      title: note.title ?? "",
+      body:  note.body ?? "",
     });
-    const result = JSON.parse(response.payload as string) as { summary: string };
-    setSummary(result.summary);
+    if (errors && errors.length > 0) {
+      console.error("Lambda error:", errors);
+    } else {
+      setSummary(data ?? null);
+    }
     setSummarizing(false);
   }
 

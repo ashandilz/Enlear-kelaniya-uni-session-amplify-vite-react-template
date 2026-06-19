@@ -1,39 +1,46 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { Authenticator } from "@aws-amplify/ui-react";
+import "@aws-amplify/ui-react/styles.css";
 import type { Schema } from "../amplify/data/resource";
-import { generateClient } from "aws-amplify/data";
+import NavBar         from "./components/NavBar";
+import NotesListPage  from "./pages/NotesListPage";
+import CreateNotePage from "./pages/CreateNotePage";
+import NoteDetail     from "./components/NoteDetail";
 
-const client = generateClient<Schema>();
+type View =
+  | "list"
+  | "create"
+  | { type: "detail"; note: Schema["Note"]["type"] };
 
 function App() {
-  const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-
-  useEffect(() => {
-    client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
-    });
-  }, []);
-
-  function createTodo() {
-    client.models.Todo.create({ content: window.prompt("Todo content") });
-  }
+  const [view, setView] = useState<View>("list");
 
   return (
-    <main>
-      <h1>My todos</h1>
-      <button onClick={createTodo}>+ new</button>
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.content}</li>
-        ))}
-      </ul>
-      <div>
-        🥳 App successfully hosted. Try creating a new todo.
-        <br />
-        <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
-          Review next step of this tutorial.
-        </a>
-      </div>
-    </main>
+    <Authenticator>
+      {({ signOut, user }) => (
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "1rem" }}>
+          <NavBar
+            username={user?.signInDetails?.loginId ?? ""}
+            onSignOut={signOut!}
+            onNavigate={(v) => setView(v)}
+          />
+
+          {view === "list" && (
+            <NotesListPage
+              onSelectNote={(note) => setView({ type: "detail", note })}
+            />
+          )}
+
+          {view === "create" && (
+            <CreateNotePage onDone={() => setView("list")} />
+          )}
+
+          {typeof view === "object" && view.type === "detail" && (
+            <NoteDetail note={view.note} onBack={() => setView("list")} />
+          )}
+        </div>
+      )}
+    </Authenticator>
   );
 }
 
